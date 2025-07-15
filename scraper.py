@@ -27,7 +27,7 @@ def fetch_shopify_apps(base_url):
 def extract_rating(review):
     rating_div = (
         review.find('div', class_='tw-flex tw-relative tw-space-x-0.5 tw-w-[88px] tw-h-md')
-        or review.find('div', attrs={'aria-label': True})  # fallback
+        or review.find('div', attrs={'aria-label': True})
     )
     if rating_div and 'aria-label' in rating_div.attrs:
         try:
@@ -48,6 +48,9 @@ def parse_review_date(date_str):
 
 def fetch_reviews(app_url, app_name, start_date, end_date):
     base_url = app_url.split('?')[0]
+    if base_url.endswith('/reviews'):
+        base_url = base_url.rsplit('/reviews', 1)[0]  # Clean trailing /reviews
+
     page = 1
     reviews = []
 
@@ -63,25 +66,23 @@ def fetch_reviews(app_url, app_name, start_date, end_date):
     session.mount("http://", adapter)
 
     while True:
-        print(f"Fetching page {page} for {app_name}...")
         reviews_url = f"{base_url}/reviews?sort_by=newest&page={page}"
+        print(f"🔗 Fetching: {reviews_url}")
 
         try:
             response = session.get(reviews_url)
             response.raise_for_status()
         except requests.exceptions.RequestException as e:
-            print(f"❌ Request failed for {reviews_url}: {e}")
+            print(f"❌ Request failed: {e}")
             break
 
         soup = BeautifulSoup(response.content, 'html.parser')
-
         review_divs = soup.find_all("div", attrs={"data-merchant-review": True},
                                     class_="lg:tw-grid lg:tw-grid-cols-4 lg:tw-gap-x-gutter--desktop")
 
         print(f"🔹 Found {len(review_divs)} reviews on page {page}")
-
         if not review_divs:
-            print('❌ No more reviews found. Stopping.')
+            print('❌ No more reviews found.')
             break
 
         has_recent_reviews_on_page = False
@@ -96,19 +97,18 @@ def fetch_reviews(app_url, app_name, start_date, end_date):
 
             reviewer_info_block = (
                 review_div.find('div', class_='tw-order-2 lg:tw-order-1 lg:tw-row-span-2 tw-mt-md md:tw-mt-0 tw-space-y-1 md:tw-space-y-2 tw-text-fg-tertiary tw-text-body-xs')
-                or review_div.find('div', class_='tw-mt-md')  # fallback
+                or review_div.find('div', class_='tw-mt-md')
             )
 
             if reviewer_info_block:
                 reviewer_name_div = (
                     reviewer_info_block.find('div', class_='tw-text-heading-xs tw-text-fg-primary tw-overflow-hidden tw-text-ellipsis tw-whitespace-nowrap')
-                    or reviewer_info_block.find('div')  # fallback
+                    or reviewer_info_block.find('div')
                 )
                 reviewer_name = reviewer_name_div.text.strip() if reviewer_name_div else "No reviewer name"
 
                 found_location = False
                 info_children_divs = [child for child in reviewer_info_block.children if isinstance(child, Tag) and child.name == 'div']
-
                 for child_div in info_children_divs:
                     if child_div == reviewer_name_div:
                         continue
@@ -124,7 +124,7 @@ def fetch_reviews(app_url, app_name, start_date, end_date):
             if date_and_rating_container:
                 review_date_div = (
                     date_and_rating_container.find('div', class_='tw-text-body-xs tw-text-fg-tertiary')
-                    or date_and_rating_container.find('div')  # fallback
+                    or date_and_rating_container.find('div')
                 )
                 review_date_str = review_date_div.text.strip() if review_date_div else "No review date"
 
@@ -154,7 +154,7 @@ def fetch_reviews(app_url, app_name, start_date, end_date):
                 continue
 
         if not has_recent_reviews_on_page and page > 1:
-            print(f'✅ All relevant reviews collected for {app_name}, or no new reviews found in the date range on this page.')
+            print(f'✅ All relevant reviews collected for {app_name}.')
             break
 
         if reviews and review_date and review_date < end_date:
@@ -166,20 +166,23 @@ def fetch_reviews(app_url, app_name, start_date, end_date):
     return reviews
 
 # --- Configuration ---
-base_url = 'https://apps.shopify.com/marketplace-connect/reviews'
-# base_url = 'https://apps.shopify.com/partners/cedcommerce'
+base_url = 'https://apps.shopify.com/checkout-blocks/reviews'  # individual app test
+# base_url = 'https://apps.shopify.com/partners/cedcommerce'   # developer test
 start_date = datetime(2025, 7, 14)
 end_date = datetime(2017, 1, 1)
 
 # --- Main Execution ---
 def main():
-    print("🔍 Detecting if URL is for a developer or individual app...")
+    print("🔍 Detecting URL type...")
 
     if "/partners/" in base_url:
         apps = fetch_shopify_apps(base_url)
     elif "apps.shopify.com/" in base_url:
-        cleaned_url = base_url.split('?')[0].split('/reviews')[0]
+        cleaned_url = base_url.split('?')[0]
+        if cleaned_url.endswith('/reviews'):
+            cleaned_url = cleaned_url.rsplit('/reviews', 1)[0]
         app_name = cleaned_url.split('/')[-1]
+        print(f"🧪 Treating as individual app: {app_name} → {cleaned_url}")
         apps = [{'name': app_name, 'url': cleaned_url}]
     else:
         print("❌ Invalid Shopify URL.")
