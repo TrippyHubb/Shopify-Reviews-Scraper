@@ -1,6 +1,6 @@
 import streamlit as st
 import pandas as pd
-from datetime import datetime
+from datetime import datetime, time # Import time as well for datetime.combine
 from urllib.parse import urlparse
 
 # Assuming your combined scraping logic is in a file named 'scraper.py'
@@ -15,8 +15,16 @@ st.title("📦 Shopify Review Scraper")
 input_url = st.text_input("Enter Shopify URL (Developer Page or Single App Review Page)",
                            value="https://apps.shopify.com/partners/cedcommerce") # Default value for testing
 
-start_date = st.date_input("Start Date", value=datetime(2025, 7, 14))
-end_date = st.date_input("End Date", value=datetime(2017, 1, 1))
+# Get date inputs from Streamlit
+start_date_input = st.date_input("Start Date", value=datetime(2025, 7, 14))
+end_date_input = st.date_input("End Date", value=datetime(2017, 1, 1))
+
+# Convert date objects to datetime objects for consistent comparison in scraper.py
+# Set time to midnight (00:00:00) for the start date
+start_date = datetime.combine(start_date_input, time.min)
+# Set time to the end of the day (23:59:59) for the end date to include the full day
+end_date = datetime.combine(end_date_input, time.max)
+
 
 if st.button("Fetch Reviews"):
     if not input_url:
@@ -39,6 +47,7 @@ if st.button("Fetch Reviews"):
 
                 for app in apps:
                     st.write(f"🔍 Fetching reviews for: {app['name']}")
+                    # Pass the converted datetime objects
                     reviews = fetch_reviews(app['url'], app['name'], start_date, end_date)
                     for review in reviews:
                         review['app_name'] = app['name'] # Ensure app_name is set
@@ -58,6 +67,7 @@ if st.button("Fetch Reviews"):
                 app_name = app_handle.replace('-', ' ').title()
 
                 st.write(f"🔍 Fetching reviews for: {app_name} ({base_app_url})")
+                # Pass the converted datetime objects
                 reviews = fetch_reviews(base_app_url, app_name, start_date, end_date)
 
                 for review in reviews:
