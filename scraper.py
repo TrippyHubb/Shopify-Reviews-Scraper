@@ -205,9 +205,9 @@ def fetch_reviews(app_url, app_name, start_date, end_date):
             # Parse the date string into a datetime object for comparison.
             review_date = parse_review_date(review_date_str)
 
-            if review_date:
+            # Ensure review_date is not None before comparison
+            if review_date is not None:
                 # Check if the review date is too new (after start_date).
-                # If so, skip it and continue to the next review on the page.
                 if review_date > start_date:
                     has_recent_reviews_on_page = True
                     continue
@@ -239,7 +239,8 @@ def fetch_reviews(app_url, app_name, start_date, end_date):
             break
 
         # If the inner loop broke because a review was too old, break the outer loop as well.
-        if reviews and review_date and review_date < end_date:
+        # This condition is also refined to ensure review_date is not None.
+        if reviews and review_date is not None and review_date < end_date:
             break
 
         page += 1
@@ -252,8 +253,7 @@ def fetch_reviews(app_url, app_name, start_date, end_date):
 # Set the URL you want to scrape here.
 # Example Developer Page: 'https://apps.shopify.com/partners/cedcommerce'
 # Example Single App Page: 'https://apps.shopify.com/checkout-blocks/reviews'
-# Example Single App Page (without /reviews): 'https://apps.shopify.com/checkout-blocks'
-input_url = 'https://apps.shopify.com/partners/shopify'
+input_url = "https://apps.shopify.com/partners/cedcommerce" # This is for local testing of scraper.py
 
 
 # Define the date range for collecting reviews.
@@ -268,24 +268,22 @@ def main():
     """
     Main function to orchestrate fetching app details and their reviews,
     then saving the collected data to a CSV file, based on the URL type.
+    This main function is primarily for direct execution of scraper.py.
+    For Streamlit, the logic is handled within app.py.
     """
     all_collected_reviews = []
 
     if "/partners/" in input_url:
         print("Detected developer page URL.")
-        # Fetch all apps from the specified developer page.
         apps = fetch_shopify_apps(input_url)
         print(f"🔹 Total Apps Found: {len(apps)}")
 
-        # Iterate through each app and fetch its reviews within the defined date range.
         for app in apps:
             reviews = fetch_reviews(app['url'], app['name'], start_date, end_date)
             for review in reviews:
-                # Ensure app_name is explicitly added to each review dictionary
                 review['app_name'] = app['name']
                 all_collected_reviews.append(review)
 
-        # Extract developer handle for CSV naming
         parsed_url = urlparse(input_url)
         path_segments = [s for s in parsed_url.path.split('/') if s]
         developer_handle = path_segments[-1] if path_segments else "unknown_developer"
@@ -294,11 +292,8 @@ def main():
     elif input_url.endswith("/reviews"):
         print("Detected single app review page URL.")
         parsed_url = urlparse(input_url)
-        path_segments = [s for s in parsed_url.path.split('/') if s] # Filter out empty strings
+        path_segments = [s for s in parsed_url.path.split('/') if s]
 
-        # For a URL like https://apps.shopify.com/checkout-blocks/reviews
-        # path_segments will be ['checkout-blocks', 'reviews']
-        # app_handle will be 'checkout-blocks'
         app_handle = path_segments[-2] if len(path_segments) >= 2 and path_segments[-1] == 'reviews' else None
         if not app_handle:
             print("❌ Could not parse app name from URL ending with /reviews. Exiting.")
@@ -312,7 +307,6 @@ def main():
         reviews = fetch_reviews(base_app_url, app_name, start_date, end_date)
 
         for review in reviews:
-            # Ensure app_name is explicitly added to each review dictionary
             review['app_name'] = app_name
             all_collected_reviews.append(review)
 
@@ -325,16 +319,10 @@ def main():
     print(f"🔹 Total Reviews Collected: {len(all_collected_reviews)}")
 
     if all_collected_reviews:
-        # Create a Pandas DataFrame from the collected data.
         df = pd.DataFrame(all_collected_reviews)
-
-        # Generate a timestamped filename for the CSV output.
         now = datetime.now()
         csv_file_path = f'{csv_filename_prefix}_{now.strftime("%Y%m%d_%H%M%S")}.csv'
-
-        # Save the DataFrame to a CSV file.
         df.to_csv(csv_file_path, index=False, encoding='utf-8')
-
         print(f"✅ Data has been written to {csv_file_path}")
     else:
         print("No reviews were collected. CSV file not created.")
