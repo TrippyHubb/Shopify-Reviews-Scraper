@@ -12,7 +12,7 @@ st.set_page_config(page_title="Shopify Review Scraper", layout="wide")
 st.title("📦 Shopify Review Scraper")
 
 # Single input for the URL
-input_url = st.text_input("Enter Shopify URL {Developer Page or Single App Review Page(Please Select All Review then Copy the URL)}",
+input_url = st.text_input("Enter Shopify URL (Developer Page or Single App Review Page)",
                            value="[Example Of Developer Page URL: https://apps.shopify.com/partners/cedcommerce], [Example Of Single Page URL: https://apps.shopify.com/amazon-by-cedcommerce/reviews]") # Default value for testing
 
 # Get date inputs from Streamlit
