@@ -13,11 +13,11 @@ st.title("📦 Shopify Review Scraper")
 
 # Single input for the URL
 input_url = st.text_input("Enter Shopify URL {Developer Page or Single App Review Page(Please Select All Review then Copy the URL)}",
-                           value="https://apps.shopify.com/partners/cedcommerce Or https://apps.shopify.com/amazon-by-cedcommerce/reviews") # Default value for testing
+                           value="Example Of Developer Page URL: https://apps.shopify.com/partners/cedcommerce Example Of Single Page URL: https://apps.shopify.com/amazon-by-cedcommerce/reviews") # Default value for testing
 
 # Get date inputs from Streamlit
-start_date_input = st.date_input("Fetch From: Latest Date", value=date.today())
-end_date_input = st.date_input("Fetch Until: Earliest Date", value=datetime(2017, 1, 1))
+start_date_input = st.date_input("Fetch From (Latest Date)", value=date.today())
+end_date_input = st.date_input("Fetch Until (Earliest Date)", value=datetime(2017, 1, 1))
 
 # Convert date objects to datetime objects for consistent comparison in scraper.py
 # Set time to midnight (00:00:00) for the start date
