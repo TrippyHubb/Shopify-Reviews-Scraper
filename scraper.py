@@ -154,6 +154,7 @@ def fetch_reviews(app_url, app_name, start_date, end_date):
             break
 
         has_recent_reviews_on_page = False
+        review_date = None  # <-- NEW: prevent UnboundLocalError if no dates parse
 
         for review_div in review_divs:
             review_text_div = review_div.find('div', {'data-truncate-content-copy': True})
@@ -234,12 +235,10 @@ input_url = "https://apps.shopify.com/partners/cedcommerce"  # This is for local
 input_url = normalize_app_url(input_url)
 # -------------------------------------------------------------------
 
-
 # Define the date range for collecting reviews.
 # (Current date for context: July 16, 2025)
 start_date = datetime(2025, 7, 16)  # Includes reviews published today or earlier.
 end_date   = datetime(2017, 1, 1)   # Collects reviews up to this date (inclusive).
-
 
 # --- Main Execution ---
 def main():

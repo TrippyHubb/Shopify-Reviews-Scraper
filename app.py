@@ -1,23 +1,28 @@
 import streamlit as st
 import pandas as pd
-from datetime import datetime, date, time # Import time as well for datetime.combine
+from datetime import datetime, date, time  # Import time as well for datetime.combine
 from urllib.parse import urlparse
 
 # Assuming your combined scraping logic is in a file named 'scraper.py'
 # If you put the combined code directly into this file, you can remove these imports
-from scraper import fetch_shopify_apps, fetch_reviews, parse_review_date, extract_rating
-
+from scraper import fetch_shopify_apps, fetch_reviews, parse_review_date, extract_rating, normalize_app_url
+#                                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+#                                ADDED: normalize_app_url import
 
 st.set_page_config(page_title="Shopify Review Scraper", layout="wide")
 st.title("📦 Shopify Review Scraper")
 
 # Single input for the URL
-input_url = st.text_input("Enter Shopify URL (Developer Page or Single App Review Page)",
-                           value="[Example Of Developer Page URL: https://apps.shopify.com/partners/cedcommerce], [Example Of Single Page URL: https://apps.shopify.com/amazon-by-cedcommerce/reviews]") # Default value for testing
+input_url = st.text_input(
+    "Enter Shopify URL (Developer Page or Single App Review Page)",
+    value="[Example Of Developer Page URL: https://apps.shopify.com/partners/cedcommerce], [Example Of Single Page URL: https://apps.shopify.com/amazon-by-cedcommerce/reviews]"
+)  # Default value for testing
 
 # Get date inputs from Streamlit
 start_date_input = st.date_input("Fetch From (Latest Date)", value=date.today())
-end_date_input = st.date_input("Fetch Until (Earliest Date)", value=datetime(2017, 1, 1))
+end_date_input = st.date_input("Fetch Until (Earliest Date)", value=date(2017, 1, 1))
+#                                                        ^^^^
+#                                                        CHANGED: use date(...) instead of datetime(...)
 
 # Convert date objects to datetime objects for consistent comparison in scraper.py
 # Set time to midnight (00:00:00) for the start date
@@ -25,13 +30,20 @@ start_date = datetime.combine(start_date_input, time.min)
 # Set time to the end of the day (23:59:59) for the end date to include the full day
 end_date = datetime.combine(end_date_input, time.max)
 
-
 if st.button("Fetch Reviews"):
     if not input_url:
         st.warning("Please enter a Shopify URL.")
     else:
+        # Normalize single-app URLs to '/<handle>/reviews'. Leave developer pages as-is.
+        if "/partners/" not in input_url:
+            try:
+                input_url = normalize_app_url(input_url)
+            except Exception as e:
+                st.error(f"Could not normalize the app URL: {e}")
+                st.stop()
+
         all_collected_reviews = []
-        csv_filename_prefix = "shopify_reviews" # Default prefix
+        csv_filename_prefix = "shopify_reviews"  # Default prefix
 
         with st.spinner("Detecting URL type and fetching reviews..."):
             if "/partners/" in input_url:
@@ -50,7 +62,7 @@ if st.button("Fetch Reviews"):
                     # Pass the converted datetime objects
                     reviews = fetch_reviews(app['url'], app['name'], start_date, end_date)
                     for review in reviews:
-                        review['app_name'] = app['name'] # Ensure app_name is set
+                        review['app_name'] = app['name']  # Ensure app_name is set
                         all_collected_reviews.append(review)
 
             elif input_url.endswith("/reviews"):
@@ -71,7 +83,7 @@ if st.button("Fetch Reviews"):
                 reviews = fetch_reviews(base_app_url, app_name, start_date, end_date)
 
                 for review in reviews:
-                    review['app_name'] = app_name # Ensure app_name is set
+                    review['app_name'] = app_name  # Ensure app_name is set
                     all_collected_reviews.append(review)
 
                 csv_filename_prefix = f'shopify_single_app_reviews_{app_name.replace(" ", "_").lower()}'
