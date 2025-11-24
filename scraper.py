@@ -8,10 +8,9 @@ import time
 import random
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
-from urllib.parse import urlparse  # Import urlparse to extract app name from URL
+from urllib.parse import urlparse
 
-
-# ---------- ADDED: normalize single app URLs to /reviews ----------
+# ---------- normalize single app URLs to /reviews (No change) ----------
 def normalize_app_url(url: str) -> str:
     """
     Normalize a Shopify app URL (with or without query params) to:
@@ -36,17 +35,12 @@ def normalize_app_url(url: str) -> str:
     return f"https://apps.shopify.com/{app_handle}/reviews"
 # -------------------------------------------------------------------
 
-
+# --- CRITICAL FIX 1: Updated logic to find app containers using data-controller ---
 def fetch_shopify_apps(base_url):
     """
     Fetches a list of all Shopify apps associated with a given developer page.
 
-    Args:
-        base_url (str): The base URL of the Shopify developer's app page.
-
-    Returns:
-        list: A list of dictionaries, where each dictionary contains the 'name'
-              and 'url' of an app.
+    ***FIXED: Uses data-controller to reliably find app cards on developer pages.***
     """
     apps = []
     try:
@@ -58,19 +52,22 @@ def fetch_shopify_apps(base_url):
 
     soup = BeautifulSoup(response.content, 'html.parser')
 
-    # Select all div elements that contain the app name and link.
-    divs = soup.select('div.tw-text-body-sm.tw-font-link')
+    # Select all div elements that contain the app name and link using the new attribute
+    app_containers = soup.find_all('div', attrs={'data-controller': 'app-card'})
 
-    for div in divs:
-        app_name_tag = div.find('a')
-        if app_name_tag:
-            app_name = app_name_tag.text.strip()
-            app_url = app_name_tag['href']
+    for container in app_containers:
+        app_name_anchor = container.find('a', href=True) # Find the anchor tag within the container
 
-            # Ensure the app URL is absolute.
-            if not app_url.startswith('http'):
-                app_url = f"https://apps.shopify.com{app_url}"
-            apps.append({'name': app_name, 'url': app_url})
+        if app_name_anchor:
+            app_name = app_name_anchor.text.strip()
+            app_url = app_name_anchor['href']
+
+            # Filter out elements that might not be true apps (like rating metrics)
+            if len(app_name) > 5 and 'out of 5 stars' not in app_name:
+                # Ensure the app URL is absolute.
+                if not app_url.startswith('http'):
+                    app_url = f"https://apps.shopify.com{app_url}"
+                apps.append({'name': app_name, 'url': app_url})
 
     print(f"✅ Found {len(apps)} apps on developer page.")
     return apps
@@ -78,7 +75,7 @@ def fetch_shopify_apps(base_url):
 
 def extract_rating(review):
     """
-    Extracts the star rating from a given review's BeautifulSoup object.
+    Extracts the star rating from a given review's BeautifulSoup object. (No change needed)
     """
     rating_div = review.find('div', class_='tw-flex tw-relative tw-space-x-0.5 tw-w-[88px] tw-h-md')
     if rating_div and 'aria-label' in rating_div.attrs:
@@ -92,7 +89,7 @@ def extract_rating(review):
 
 def parse_review_date(date_str):
     """
-    Converts a Shopify review date string into a Python datetime object.
+    Converts a Shopify review date string into a Python datetime object. (No change needed)
     """
     if 'Edited' in date_str:
         date_str = date_str.split('Edited')[1].strip()
@@ -104,9 +101,12 @@ def parse_review_date(date_str):
         return None
 
 
+# --- CRITICAL FIX 2: Updated selectors for finding review content ---
 def fetch_reviews(app_url, app_name, start_date, end_date):
     """
     Fetches all reviews for a specific Shopify app within a given date range.
+
+    ***FIXED: Updated main review container selector and all inner element selectors.***
     """
     # Ensure the URL points to the app's base page (not directly to reviews) for building pages:
     if '/reviews' in app_url:
@@ -141,11 +141,8 @@ def fetch_reviews(app_url, app_name, start_date, end_date):
 
         soup = BeautifulSoup(response.content, 'html.parser')
 
-        review_divs = soup.find_all(
-            "div",
-            attrs={"data-merchant-review": True},
-            class_="lg:tw-grid lg:tw-grid-cols-4 lg:tw-gap-x-gutter--desktop"
-        )
+        # CRITICAL FIX 2.1: Find review containers using ONLY the unique data attribute
+        review_divs = soup.find_all("div", attrs={"data-merchant-review": True})
 
         print(f"🔹 Found {len(review_divs)} reviews on page {page}")
 
@@ -154,33 +151,44 @@ def fetch_reviews(app_url, app_name, start_date, end_date):
             break
 
         has_recent_reviews_on_page = False
-        review_date = None  # <-- NEW: prevent UnboundLocalError if no dates parse
+        review_date = None
 
         for review_div in review_divs:
-            review_text_div = review_div.find('div', {'data-truncate-content-copy': True})
-            review_text = review_text_div.find('p').text.strip() if review_text_div and review_text_div.find('p') else "No review text"
+            # CRITICAL FIX 2.2: Extracting Review Text (Now inside p in tw-text-body-md)
+            review_text_container = review_div.find('div', class_='tw-text-body-md tw-text-fg-secondary')
+            review_text = review_text_container.find('p').text.strip() if review_text_container and review_text_container.find('p') else "No review text"
 
             reviewer_name = "No reviewer name"
             location = "N/A"
             duration = "N/A"
 
-            reviewer_info_block = review_div.find('div', class_='tw-order-2 lg:tw-order-1 lg:tw-row-span-2 tw-mt-md md:tw-mt-0 tw-space-y-1 md:tw-space-y-2 tw-text-fg-tertiary tw-text-body-xs')
+            # CRITICAL FIX 2.3: Locate the reviewer information block (tw-order-1 is the new class)
+            reviewer_info_block = review_div.find('div', class_='tw-order-1 lg:tw-order-1 lg:tw-row-span-2 tw-mt-md md:tw-mt-0 tw-space-y-1 md:tw-space-y-2 tw-text-fg-tertiary tw-text-body-xs')
+
             if reviewer_info_block:
-                reviewer_name_div = reviewer_info_block.find('div', class_='tw-text-heading-xs tw-text-fg-primary tw-overflow-hidden tw-text-ellipsis tw-whitespace-nowrap')
-                reviewer_name = reviewer_name_div.text.strip() if reviewer_name_div else "No reviewer name"
+
+                # CRITICAL FIX 2.4: Extract Reviewer Name (Inside a span now)
+                reviewer_name_span = reviewer_info_block.find('span', class_='tw-overflow-hidden tw-text-ellipsis tw-whitespace-nowrap')
+                reviewer_name = reviewer_name_span.text.strip() if reviewer_name_span else "No reviewer name"
+
+                # CRITICAL FIX 2.5: Extract Location and Duration from sibling divs
+                info_children_divs = [child for child in reviewer_info_block.children if isinstance(child, Tag) and child.name == 'div']
 
                 found_location = False
-                info_children_divs = [child for child in reviewer_info_block.children if isinstance(child, Tag) and child.name == 'div']
                 for child_div in info_children_divs:
-                    if child_div == reviewer_name_div:
-                        continue
                     text_content = child_div.text.strip()
-                    if 'using the app' in text_content:
-                        duration = text_content.replace(' using the app', '')
-                    elif not found_location and len(text_content) > 0:
+                    # Check if the child div is the name container (which has the span)
+                    is_name_container = child_div.find('span', class_='tw-overflow-hidden tw-text-ellipsis tw-whitespace-nowrap') is not None
+                    
+                    if 'using the app' in text_content: # Identify duration by a specific phrase.
+                        duration = text_content
+                    
+                    # This captures the location div, which is the first non-name, non-duration div.
+                    elif not found_location and len(text_content) > 0 and not is_name_container: 
                         location = text_content
                         found_location = True
 
+            # Extract review date. (Selectors still work)
             date_and_rating_container = review_div.find('div', class_='tw-flex tw-items-center tw-justify-between tw-mb-md')
             review_date_str = "No review date"
             if date_and_rating_container:
@@ -231,14 +239,14 @@ def fetch_reviews(app_url, app_name, start_date, end_date):
 # Example Single App Page: 'https://apps.shopify.com/checkout-blocks/reviews'
 input_url = "https://apps.shopify.com/partners/cedcommerce"  # This is for local testing of scraper.py
 
-# ---------- ADDED: normalize only if it's a single-app URL ----------
+# ---------- normalize only if it's a single-app URL (No change) ----------
 input_url = normalize_app_url(input_url)
 # -------------------------------------------------------------------
 
 # Define the date range for collecting reviews.
-# (Current date for context: July 16, 2025)
-start_date = datetime(2025, 7, 16)  # Includes reviews published today or earlier.
-end_date   = datetime(2017, 1, 1)   # Collects reviews up to this date (inclusive).
+# (Current date for context: November 24, 2025)
+start_date = datetime(2025, 11, 24)  # Includes reviews published today or earlier.
+end_date   = datetime(2017, 1, 1)    # Collects reviews up to this date (inclusive).
 
 # --- Main Execution ---
 def main():
@@ -266,14 +274,17 @@ def main():
         developer_handle = path_segments[-1] if path_segments else "unknown_developer"
         csv_filename_prefix = f'shopify_developer_reviews_{developer_handle}'
 
-    elif input_url.endswith("/reviews"):
+    # CRITICAL FIX 3: More robust check for single app URLs
+    elif input_url.endswith("/reviews") or (input_url.count('/') == 4 and not input_url.endswith('/')):
         print("Detected single app review page URL.")
         parsed_url = urlparse(input_url)
         path_segments = [s for s in parsed_url.path.split('/') if s]
 
-        app_handle = path_segments[-2] if len(path_segments) >= 2 and path_segments[-1] == 'reviews' else None
+        # Use app_handle from path. If last segment is 'reviews', use the one before it. Otherwise, use the last one.
+        app_handle = path_segments[0] if path_segments[-1] != 'reviews' else path_segments[-2]
+
         if not app_handle:
-            print("❌ Could not parse app name from URL ending with /reviews. Exiting.")
+            print("❌ Could not parse app name from URL. Exiting.")
             return
 
         base_app_url = f"https://apps.shopify.com/{app_handle}"
